@@ -1,0 +1,429 @@
+// Esquema de BulkApp en PostgreSQL.
+//
+// Parte del DDL de MySQL (docs/migracion/esquema-actual.sql) con las correcciones
+// obligatorias de docs/migracion/nodejs-react.md §5.6:
+//   1. users.user            → users.username (palabra reservada)
+//   2. servicios."campo 2"   → servicios.campo_2
+//   3. gestion.subContacto_id / tipoGestion → subcontacto_id / tipo_gestion
+//   4. índices con prefijo idx_ (comparten espacio de nombres con las tablas)
+//   5. fechas cero           → now()
+//   6. gestion.servicio_id   VARCHAR → integer
+//   7. resultados.cedula     INT → varchar(10) (conserva ceros a la izquierda)
+//   8. resultados.fecha_venta / fecha_nacimiento  texto → date
+// DATETIME pasa a timestamptz (instante absoluto; la app opera en America/Caracas).
+// `updated_at` lo mantiene Prisma (@updatedAt) en lugar de ON UPDATE.
+// Tablas no migradas: carga_temporal_clientes, rechazo_ventas y las de Cashea.
+// gestion, resultados y clientes siguen sin FK: hay huérfanos históricos (§5.6 #10).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum TipoFlujo {
+  bancario
+  dinamico
+
+  @@map("tipo_flujo")
+}
+
+model Empresa {
+  id             Int        @id @default(autoincrement())
+  nombre         String     @unique(map: "uq_empresa_nombre") @db.VarChar(100)
+  identificacion String?    @db.VarChar(20)
+  status_id      Int        @default(2)
+  created_at     DateTime   @default(now()) @db.Timestamptz(0)
+  updated_at     DateTime   @default(now()) @updatedAt @db.Timestamptz(0)
+  servicios      Servicio[]
+
+  @@map("empresas")
+}
+
+/// Campaña. Su id es el `servicio_id` de todo el sistema.
+model Servicio {
+  id           Int               @id @default(autoincrement())
+  empresa_id   Int
+  descripcion  String            @db.VarChar(50)
+  detalle      String?           @db.VarChar(500)
+  fecha_inicio DateTime          @db.Date
+  meta         Int?
+  tipo_flujo   TipoFlujo         @default(dinamico)
+  status_id    Int               @default(2)
+  codigo       String            @default("") @db.VarChar(10)
+  campo_2      String?           @db.VarChar(10)
+  created_at   DateTime          @default(now()) @db.Timestamptz(0)
+  updated_at   DateTime          @default(now()) @updatedAt @db.Timestamptz(0)
+  empresa      Empresa           @relation(fields: [empresa_id], references: [id], map: "fk_servicio_empresa")
+  usuarios     UsuarioServicio[]
+  principales  User[]
+  efectivos    Efectivo[]
+
+  @@unique([empresa_id, descripcion], map: "uq_servicio_empresa_nombre")
+  @@index([empresa_id], map: "idx_servicio_empresa")
+  @@map("servicios")
+}
+
+model Usertype {
+  id         Int      @id @default(autoincrement())
+  name       String   @db.VarChar(50)
+  created_at DateTime @default(now()) @db.Timestamptz(0)
+  updated_at DateTime @default(now()) @updatedAt @db.Timestamptz(0)
+  users      User[]
+
+  @@map("usertypes")
+}
+
+model Status {
+  id         Int      @id @default(autoincrement())
+  name       String   @db.VarChar(50)
+  created_at DateTime @default(now()) @db.Timestamptz(0)
+  updated_at DateTime @default(now()) @updatedAt @db.Timestamptz(0)
+  users      User[]
+
+  @@map("status")
+}
+
+model User {
+  id          Int               @id @default(autoincrement())
+  nombre      String            @db.VarChar(50)
+  apellido    String            @db.VarChar(50)
+  username    String            @unique(map: "uq_users_username") @db.VarChar(50)
+  password    String            @db.VarChar(255)
+  usertype_id Int
+  status_id   Int
+  /// Campaña principal: siempre está también en usuario_servicios.
+  servicio_id Int
+  usertype    Usertype          @relation(fields: [usertype_id], references: [id], map: "fk_users_usertype")
+  status      Status            @relation(fields: [status_id], references: [id], map: "fk_users_status")
+  servicio    Servicio          @relation(fields: [servicio_id], references: [id], map: "fk_users_servicio")
+  campanas    UsuarioServicio[]
+
+  @@index([usertype_id], map: "idx_users_usertype")
+  @@index([status_id], map: "idx_users_status")
+  @@index([servicio_id], map: "idx_users_servicio")
+  @@map("users")
+}
+
+model UsuarioServicio {
+  user_id     Int
+  servicio_id Int
+  created_at  DateTime @default(now()) @db.Timestamptz(0)
+  user        User     @relation(fields: [user_id], references: [id], onDelete: Cascade, map: "fk_us_user")
+  servicio    Servicio @relation(fields: [servicio_id], references: [id], map: "fk_us_servicio")
+
+  @@id([user_id, servicio_id])
+  @@index([servicio_id], map: "idx_us_servicio")
+  @@map("usuario_servicios")
+}
+
+/// Base de contactos a gestionar (campañas bancarias).
+model Cliente {
+  id             Int      @id @default(autoincrement())
+  identificacion String?
+  nombre_legal   String?
+  telf_hab       String?
+  telf_ofi       String?
+  telf_cel       String?
+  correo         String?
+  direccion      String?
+  cuenta         String?
+  oferta         String   @default("")
+  status_id      Int?     @default(3)
+  servicio_id    Int      @default(1)
+  is_active      Boolean  @default(true)
+  created_at     DateTime @default(now()) @db.Timestamptz(0)
+  updated_at     DateTime @default(now()) @updatedAt @db.Timestamptz(0)
+
+  @@index([status_id], map: "idx_clientes_status_id")
+  @@index([servicio_id, status_id], map: "idx_clientes_servicio_status")
+  @@index([servicio_id, identificacion], map: "idx_clientes_servicio_identificacion")
+  @@map("clientes")
+}
+
+/// Cada llamada / gestión.
+model Gestion {
+  id             Int      @id @default(autoincrement())
+  contacto_id    Int?
+  efectivo_id    Int?
+  producto_id    Int?
+  noefectivo_id  Int?
+  subcontacto_id Int?
+  user_id        Int
+  fecha          DateTime @db.Date
+  cliente_id     Int
+  status_id      Int
+  hora           DateTime @db.Time(0)
+  servicio_id    Int
+  tipo_gestion   String   @default("telefonica") @db.VarChar(30)
+  created_at     DateTime @default(now()) @db.Timestamptz(0)
+  updated_at     DateTime @default(now()) @updatedAt @db.Timestamptz(0)
+
+  @@index([cliente_id], map: "idx_gestion_cliente_id")
+  @@index([user_id], map: "idx_gestion_user_id")
+  @@index([status_id], map: "idx_gestion_status_id")
+  @@index([servicio_id, fecha], map: "idx_gestion_servicio_fecha")
+  @@index([efectivo_id], map: "idx_gestion_efectivo_id")
+  @@index([noefectivo_id], map: "idx_gestion_noefectivo_id")
+  @@index([fecha], map: "idx_gestion_fecha")
+  @@index([cliente_id, user_id], map: "idx_gestion_cliente_user")
+  @@map("gestion")
+}
+
+model Efectivo {
+  id          Int      @id @default(autoincrement())
+  descripcion String   @db.VarChar(50)
+  servicio_id Int
+  created_at  DateTime @default(now()) @db.Timestamptz(0)
+  updated_at  DateTime @default(now()) @updatedAt @db.Timestamptz(0)
+  servicio    Servicio @relation(fields: [servicio_id], references: [id], map: "fk_efectivo_servicio")
+
+  @@index([servicio_id], map: "idx_efectivo_servicio")
+  @@map("efectivo")
+}
+
+model Noefectivo {
+  id          Int      @id @default(autoincrement())
+  descripcion String   @db.VarChar(50)
+  servicio_id Int      @default(1)
+  created_at  DateTime @default(now()) @db.Timestamptz(0)
+  updated_at  DateTime @default(now()) @updatedAt @db.Timestamptz(0)
+
+  @@map("noefectivo")
+}
+
+model Subcontacto {
+  id          Int      @id @default(autoincrement())
+  descripcion String
+  efectivo_id Int?
+  created_at  DateTime @default(now()) @db.Timestamptz(0)
+  updated_at  DateTime @default(now()) @updatedAt @db.Timestamptz(0)
+
+  @@index([efectivo_id], map: "idx_subcontacto_efectivo")
+  @@map("subcontacto")
+}
+
+model Producto {
+  id              Int      @id @default(autoincrement())
+  descripcion     String?  @db.VarChar(100)
+  codigo_producto String?  @db.VarChar(11)
+  costo_prod      String?  @db.VarChar(11)
+  status_id       Int
+  servicio_id     Int
+  fecha           String   @db.VarChar(20)
+  codplan         String   @default("") @db.VarChar(10)
+  created_at      DateTime @default(now()) @db.Timestamptz(0)
+  updated_at      DateTime @default(now()) @updatedAt @db.Timestamptz(0)
+
+  @@index([servicio_id, status_id], map: "idx_productos_servicio_status")
+  @@map("productos")
+}
+
+/// Ventas bancarias (datos completos del cliente vendido).
+model Resultado {
+  id               Int       @id @default(autoincrement())
+  gestion_id       Int
+  nombre           String    @db.VarChar(60)
+  apellido         String    @db.VarChar(60)
+  genero           String    @db.VarChar(1)
+  fecha_nacimiento DateTime? @db.Date
+  nacionalidad     String    @db.VarChar(2)
+  cedula           String    @db.VarChar(10)
+  telf_hab         String    @db.VarChar(20)
+  telf_ofi         String?   @db.VarChar(20)
+  telf_celular     String    @db.VarChar(20)
+  correo           String    @db.VarChar(150)
+  estado_id        Int
+  ciudad_id        Int
+  municipio_id     Int
+  cuenta           String    @db.VarChar(20)
+  tipo_cuenta_id   Int
+  producto_id      Int
+  observaciones    String    @default("") @db.VarChar(250)
+  fecha_venta      DateTime  @db.Date
+  servicio_id      Int
+  status_id        Int?      @default(7)
+  created_at       DateTime  @default(now()) @db.Timestamptz(0)
+  updated_at       DateTime  @default(now()) @updatedAt @db.Timestamptz(0)
+
+  @@index([estado_id], map: "idx_resultados_estado_id")
+  @@index([ciudad_id], map: "idx_resultados_ciudad_id")
+  @@index([producto_id], map: "idx_resultados_producto_id")
+  @@index([gestion_id], map: "idx_resultados_gestion_id")
+  @@index([cedula], map: "idx_resultados_cedula")
+  @@index([servicio_id, fecha_venta], map: "idx_resultados_servicio_fecha")
+  @@map("resultados")
+}
+
+model Estado {
+  id          Int    @id @default(autoincrement())
+  estado      String @db.VarChar(50)
+  codigo      Int
+  servicio_id Int
+
+  @@map("estado")
+}
+
+model Ciudad {
+  id          Int    @id @default(autoincrement())
+  ciudad      String @db.VarChar(80)
+  codigo      String @db.VarChar(3)
+  estado_id   Int
+  servicio_id Int    @default(1)
+
+  @@index([estado_id], map: "idx_ciudad_estado")
+  @@map("ciudad")
+}
+
+model Municipio {
+  id          Int    @id @default(autoincrement())
+  nombre      String @db.VarChar(50)
+  codigo      String @db.VarChar(4)
+  estado_id   Int
+  servicio_id Int
+
+  @@index([estado_id], map: "idx_municipio_estado")
+  @@map("municipio")
+}
+
+model TipoCuenta {
+  id        Int     @id @default(autoincrement())
+  nombre    String? @db.VarChar(50)
+  codigo    Int?
+  status_id Int
+
+  @@map("tipo_cuentas")
+}
+
+/// Numeración de las transacciones del XML (usada por un sistema externo).
+model Transaccion {
+  id_transaccion Int    @id @default(autoincrement())
+  fecha          String @db.VarChar(15)
+  resultado_id   Int
+
+  @@map("transacciones")
+}
+
+// ---------------------------------------------------------------------------
+// Constructor de formularios dinámicos
+// ---------------------------------------------------------------------------
+
+model Formulario {
+  id           Int                  @id @default(autoincrement())
+  nombre       String               @db.VarChar(150)
+  status_id    Int                  @default(1)
+  btn_texto    String               @default("Guardar") @db.VarChar(80)
+  eliminado    Boolean              @default(false)
+  eliminado_en DateTime?            @db.Timestamptz(0)
+  user_id      Int?
+  fecha        DateTime             @default(now()) @db.Timestamptz(0)
+  actualizado  DateTime             @default(now()) @updatedAt @db.Timestamptz(0)
+  versiones    FormularioVersion[]
+  servicios    FormularioServicio[]
+  cargas       FormularioCarga[]
+  envios       FormularioEnvio[]
+
+  @@index([status_id, eliminado], map: "idx_formularios_estado")
+  @@map("formularios")
+}
+
+model FormularioVersion {
+  id            Int               @id @default(autoincrement())
+  formulario_id Int
+  version       Int
+  definicion    Json
+  nota          String?           @db.VarChar(255)
+  vigente       Boolean           @default(false)
+  user_id       Int?
+  fecha         DateTime          @default(now()) @db.Timestamptz(0)
+  formulario    Formulario        @relation(fields: [formulario_id], references: [id], onDelete: Cascade, map: "fk_ver_form")
+  envios        FormularioEnvio[]
+
+  @@unique([formulario_id, version], map: "uq_form_version")
+  @@index([formulario_id, vigente], map: "idx_ver_vigente")
+  @@map("formulario_versiones")
+}
+
+model FormularioServicio {
+  id            Int        @id @default(autoincrement())
+  formulario_id Int
+  servicio_id   Int
+  formulario    Formulario @relation(fields: [formulario_id], references: [id], onDelete: Cascade, map: "fk_fs_form")
+
+  @@unique([formulario_id, servicio_id], map: "uq_form_serv")
+  @@index([servicio_id], map: "idx_fs_servicio")
+  @@map("formulario_servicios")
+}
+
+model FormularioCarga {
+  id            Int                   @id @default(autoincrement())
+  formulario_id Int
+  archivo       String                @db.VarChar(255)
+  filas         Int                   @default(0)
+  mapping       Json
+  vigente       Boolean               @default(false)
+  user_id       Int?
+  fecha         DateTime              @default(now()) @db.Timestamptz(0)
+  formulario    Formulario            @relation(fields: [formulario_id], references: [id], onDelete: Cascade, map: "fk_carga_form")
+  registros     FormularioCargaFila[]
+  envios        FormularioEnvio[]
+
+  @@index([formulario_id, vigente], map: "idx_carga_vigente")
+  @@map("formulario_cargas")
+}
+
+model FormularioCargaFila {
+  id       BigInt           @id @default(autoincrement())
+  carga_id Int
+  clave    String?          @db.VarChar(191)
+  fila     Json
+  carga    FormularioCarga  @relation(fields: [carga_id], references: [id], onDelete: Cascade, map: "fk_filas_carga")
+  envio    FormularioEnvio?
+
+  @@index([carga_id, clave], map: "idx_carga_clave")
+  @@map("formulario_carga_filas")
+}
+
+model FormularioEnvio {
+  id            Int                  @id @default(autoincrement())
+  formulario_id Int
+  version_id    Int
+  /// Desnormalizado para reportes.
+  servicio_id   Int
+  carga_id      Int?
+  /// Única: una fila de carga solo se captura una vez.
+  fila_id       BigInt?              @unique(map: "uq_env_fila")
+  registro      Json?
+  valores       Json
+  user_id       Int?
+  fecha         DateTime             @default(now()) @db.Timestamptz(0)
+  formulario    Formulario           @relation(fields: [formulario_id], references: [id], map: "fk_env_form")
+  version       FormularioVersion    @relation(fields: [version_id], references: [id], map: "fk_env_version")
+  carga         FormularioCarga?     @relation(fields: [carga_id], references: [id], onDelete: SetNull, map: "fk_env_carga")
+  fila          FormularioCargaFila? @relation(fields: [fila_id], references: [id], onDelete: SetNull, map: "fk_env_fila")
+
+  @@index([servicio_id, fecha], map: "idx_env_servicio")
+  @@index([formulario_id, fecha], map: "idx_env_form")
+  @@index([version_id], map: "idx_env_version")
+  @@map("formulario_envios")
+}
+
+/// Catálogo de validaciones del editor (se congelan en la versión al guardar).
+model FormularioExpresion {
+  id               Int     @id @default(autoincrement())
+  clave            String  @unique(map: "uq_expr_clave") @db.VarChar(30)
+  nombre           String  @db.VarChar(80)
+  descripcion      String  @db.VarChar(255)
+  patron           String? @db.VarChar(255)
+  transformacion   String? @db.VarChar(20)
+  tipos            String  @default("text,textarea") @db.VarChar(60)
+  ejemplo_valido   String  @db.VarChar(120)
+  ejemplo_invalido String? @db.VarChar(120)
+  orden            Int     @default(0)
+  status_id        Int     @default(2)
+
+  @@map("formulario_expresiones")
+}

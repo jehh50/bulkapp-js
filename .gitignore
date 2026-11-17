@@ -1,0 +1,17 @@
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Configuración local y secretos
+.env
+.env.*
+!.env.example
+
+# Archivos generados en ejecución (XML de ventas)
+storage/
+
+# Logs y sistema
+*.log
+.DS_Store
+.idea/
+.vscode/
