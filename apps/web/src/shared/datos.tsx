@@ -2,7 +2,7 @@
  * Consultas y componentes de datos reutilizados por reportes y administración.
  */
 import type { ReactNode } from 'react';
-import { Table, TableBody, TableCell, TableContainer, TableHead, TableRow } from '@mui/material';
+import { Table, TableBody, TableCell, TableContainer, TableFooter, TableHead, TableRow } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
 import type { Flujo } from '@bulkapp/shared';
 import { api } from './api.ts';
@@ -28,7 +28,10 @@ export interface Columna<T> {
   ancho?: number | string;
 }
 
-/** Tabla densa con mensaje de vacío. `clave` identifica cada fila de forma estable. */
+/**
+ * Tabla densa (`.data-table`) con mensaje de vacío. `clave` identifica cada fila de
+ * forma estable; `pie` va en un `tfoot` azul de totales.
+ */
 export function Tabla<T>({ filas, columnas, clave, vacio = 'Sin resultados.', pie }: {
   filas: readonly T[]; columnas: Array<Columna<T>>; clave: (fila: T, indice: number) => string | number; vacio?: string; pie?: ReactNode;
 }) {
@@ -51,8 +54,8 @@ export function Tabla<T>({ filas, columnas, clave, vacio = 'Sin resultados.', pi
               ))}
             </TableRow>
           ))}
-          {pie}
         </TableBody>
+        {pie && <TableFooter>{pie}</TableFooter>}
       </Table>
     </TableContainer>
   );
