@@ -8,7 +8,8 @@ import SearchIcon from '@mui/icons-material/Search';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { EFECTIVO_VENTA_ID, GENEROS, NACIONALIDADES, NACIONALIDAD_NOMBRE, mascaraTelefonoBanca, validarGestion } from '@bulkapp/shared';
 import { ApiError, api, mensajeDe } from '../shared/api.ts';
-import { CampoFecha, Consulta, Indicador, Pagina, Seccion, Selector, useAvisos, type Opcion } from '../shared/ui.tsx';
+import { MARCA } from '../shared/tema.ts';
+import { CampoFecha, Consulta, Pagina, Seccion, Selector, TarjetaHero, useAvisos, type Opcion } from '../shared/ui.tsx';
 
 interface Item { id: number; descripcion: string }
 interface Nombrado { id: number; nombre: string }
@@ -148,19 +149,18 @@ export default function CapturaBancariaPage() {
   );
 
   return (
-    <Pagina titulo="Formulario de gestión" subtitulo="Busca al cliente por cédula o teléfono y registra el resultado de la llamada.">
+    <Pagina
+      titulo="Formulario de gestión" subtitulo="Busca al cliente por cédula o teléfono y registra el resultado de la llamada."
+      indicadores={indicadores.data && (
+        <>
+          <TarjetaHero etiqueta="Contactos efectivos hoy" valor={indicadores.data.efectivos} />
+          <TarjetaHero etiqueta="Ventas hoy" valor={indicadores.data.ventas} color={MARCA.verde} />
+          {indicadores.data.porProducto.map((p) => <TarjetaHero key={p.producto ?? '—'} etiqueta={p.producto ?? 'Sin producto'} valor={p.vendidos} color={MARCA.tenue} />)}
+        </>
+      )}
+    >
       <Stack spacing={3}>
-        <Consulta query={indicadores}>
-          {(i) => (
-            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
-              <Indicador etiqueta="Contactos efectivos hoy" valor={i.efectivos} />
-              <Indicador etiqueta="Ventas hoy" valor={i.ventas} color="success.main" />
-              {i.porProducto.map((p) => <Indicador key={p.producto ?? '—'} etiqueta={p.producto ?? 'Sin producto'} valor={p.vendidos} color="secondary.main" />)}
-            </Stack>
-          )}
-        </Consulta>
-
-        <Seccion titulo="Buscar cliente">
+        <Seccion titulo="Buscar cliente" acento={MARCA.dorado}>
           <Stack
             component="form" direction={{ xs: 'column', sm: 'row' }} spacing={1.5}
             onSubmit={(e) => { e.preventDefault(); if (termino.trim() !== '') buscar.mutate(termino.trim()); }}
@@ -196,7 +196,7 @@ export default function CapturaBancariaPage() {
                     </Grid>
                   </Seccion>
 
-                  <Seccion titulo="Resultado de la llamada">
+                  <Seccion titulo="Resultado de la llamada" acento={MARCA.azul700}>
                     <Grid container spacing={2}>
                       <Grid size={{ xs: 12, sm: 6, md: 3 }}>
                         {lista('contacto', '¿Hubo contacto?', [{ value: '1', label: 'Contacto efectivo' }, { value: '0', label: 'Contacto no efectivo' }])}

@@ -15,11 +15,14 @@ const CapturaDinamicaPage = lazy(() => import('../features/CapturaDinamicaPage.t
 const DashboardPage = lazy(() => import('../features/DashboardPage.tsx'));
 const AcumuladoPage = lazy(() => import('../features/AcumuladoPage.tsx'));
 const VentasPage = lazy(() => import('../features/VentasPage.tsx'));
+const DetalleVentasPage = lazy(() => import('../features/DetalleVentasPage.tsx'));
 const ReporteFormulariosPage = lazy(() => import('../features/ReporteFormulariosPage.tsx'));
 const XmlPage = lazy(() => import('../features/XmlPage.tsx'));
 const UsuariosPage = lazy(() => import('../features/UsuariosPage.tsx'));
 const ProductosPage = lazy(() => import('../features/ProductosPage.tsx'));
-const ClientesPage = lazy(() => import('../features/ClientesPage.tsx'));
+const CargaBbddPage = lazy(() => import('../features/CargaBbddPage.tsx'));
+const ResultadosPage = lazy(() => import('../features/ResultadosPage.tsx'));
+const LiberarPage = lazy(() => import('../features/LiberarPage.tsx'));
 const EmpresasPage = lazy(() => import('../features/EmpresasPage.tsx'));
 const ConstructorPage = lazy(() => import('../features/ConstructorPage.tsx'));
 const PasswordPage = lazy(() => import('../features/PasswordPage.tsx'));
@@ -102,11 +105,16 @@ export function Rutas() {
           <Route path="dashboard" element={<DashboardPage />} />
           <Route path="reportes/acumulado" element={<AcumuladoPage />} />
           <Route path="reportes/ventas" element={<VentasPage />} />
+          <Route path="reportes/detalle-ventas" element={<DetalleVentasPage />} />
           <Route path="reportes/formularios" element={<ReporteFormulariosPage />} />
           <Route path="xml" element={<XmlPage />} />
           <Route path="admin/usuarios" element={<UsuariosPage />} />
           <Route path="admin/productos" element={<ProductosPage />} />
-          <Route path="admin/clientes" element={<ClientesPage />} />
+          <Route path="admin/usuarios/nuevo" element={<UsuariosPage alta />} />
+          <Route path="admin/carga" element={<CargaBbddPage />} />
+          <Route path="admin/resultados" element={<ResultadosPage />} />
+          <Route path="reportes/liberar" element={<LiberarPage />} />
+          <Route path="admin/clientes" element={<Navigate to="/admin/carga" replace />} />
         </Route>
 
         <Route element={<SoloRoles roles={ROLES_ADMIN} />}>
